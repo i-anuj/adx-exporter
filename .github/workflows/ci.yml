@@ -3,7 +3,10 @@ name: CI — Lint, Scan and Test
 on:
   push:
     branches:
-      - adx-exporter
+      - 'kql/**'
+    paths:
+      - 'queries/**.kql'
+      - 'queries/__init__.py'
 
 jobs:
 
@@ -15,7 +18,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -27,12 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run Trivy on requirements.txt
+      - name: Run Trivy
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
-          scan-ref: requirements.txt
+          scan-ref: .
+          skip-dirs: ".git"
           format: table
           exit-code: 1
           severity: HIGH,CRITICAL
@@ -44,18 +46,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install ruff
         run: pip install ruff
-
       - name: Run ruff check
         run: ruff check .
-
       - name: Run ruff format check
         run: ruff format --check .
 
@@ -65,6 +63,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check __init__.py references new KQL
+        run: |
+          KQL=$(git diff --name-only HEAD~1 HEAD | grep 'queries/.*\.kql')
+          INIT=$(git diff --name-only HEAD~1 HEAD | grep 'queries/__init__.py')
+          if [ -n "$KQL" ] && [ -z "$INIT" ]; then
+            echo "WARNING: KQL file detected but queries/__init__.py was not updated"
+            echo "FAILURE: $KQL was added without updating queries/__init__.py — update the QUERIES list and push again"
+            exit 1
+          fi
+
+      - name: Check required secrets
+        run: |
+          [ -n "$ADX_CLUSTER_URL" ] || (echo "FAILURE: ADX_CLUSTER_URL is not set — add it under Settings > Secrets and variables > Actions" && exit 1)
+          [ -n "$DD_API_KEY" ] || (echo "FAILURE: DD_API_KEY is not set — add it under Settings > Secrets and variables > Actions" && exit 1)
+        env:
+          ADX_CLUSTER_URL: ${{ secrets.ADX_CLUSTER_URL }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -82,7 +100,7 @@ jobs:
           ADX_CLUSTER_URL: ${{ secrets.ADX_CLUSTER_URL }}
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
 
-  # ── 6. Auto-create PR once all checks pass ──────────────────────────────
+  # ── 5. Auto-create PR once all checks pass ──────────────────────────────
   create-pr:
     name: Auto-create PR to main
     runs-on: ubuntu-latest
@@ -92,35 +110,12 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: "Deploy: adx-exporter → main (${{ github.sha }})"
-          body: |
-            ## All CI checks passed — ready for review
-
-            **Branch:** `adx-exporter`
-            **Commit:** `${{ github.sha }}`
-            **Triggered by:** @${{ github.actor }}
-
-            ### CI checks completed
-            - Gitleaks — no secrets found
-            - Trivy — no HIGH/CRITICAL CVEs
-            - Ruff — lint and format clean
-            - Tests — all passed (includes KQL + __init__.py validation)
-
-            ### Reviewer checklist
-            - [ ] Code change looks correct
-            - [ ] Query logic reviewed (if KQL changed)
-            - [ ] Safe to deploy to production
-
-            ---
-            > **Merging this PR will trigger deployment to Azure Functions.**
-            > Approve → Merge → deploy fires automatically.
-            > This PR was auto-created by GitHub Actions after all CI checks passed.
-          base: main
-          branch: adx-exporter
-          labels: "ready-to-deploy"
-          draft: false
+      - name: Create PR to main
+        run: |
+          gh pr create \
+            --title "KQL: ${{ github.ref_name }} (${{ github.sha }})" \
+            --body "CI passed. Ready for review." \
+            --base main \
+            --label ready-to-deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

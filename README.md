@@ -7,15 +7,15 @@ An Azure Function that runs every 5 minutes, queries Azure Data Explorer (ADX/Ku
 ## How the CI/CD pipeline works
 
 ```
-push to adx-exporter branch
+git checkout -b kql/<query-name>
         ↓
 CI runs automatically:
   • Gitleaks   — secret scan
-  • Trivy      — CVE scan on requirements.txt
+  • Trivy      — CVE scan on dependencies
   • Ruff       — lint + format check
-  • pytest     — unit tests (includes KQL + __init__.py validation)
+  • pytest     — checks __init__.py updated + unit tests
         ↓
-All pass → auto-PR created: adx-exporter → main
+All pass → auto-PR created: kql/<query-name> → main
         ↓
 1 approver reviews and approves → merges into main
         ↓
@@ -23,7 +23,8 @@ Deploy fires automatically → Azure Functions (prod)
 ```
 
 > If the PR is **not approved**, deployment never runs.
-> Pushing to any branch other than `adx-exporter` will not trigger CI or deployment.
+> CI only triggers on branches matching `kql/**` with changes to `queries/`.
+> Direct pushes to `main` are blocked by branch protection — all changes must go through a reviewed PR.
 
 ---
 
@@ -44,11 +45,14 @@ Go to **Settings → Branches → Add rule** for `main`:
   - `Run tests`
 - Do not allow bypassing the above settings
 
-### 2. Branch protection — `adx-exporter`
+### 2. Branch protection — `kql/**`
 
-Go to **Settings → Branches → Add rule** for `adx-exporter`:
+Go to **Settings → Branches → Add rule** for `kql/**`:
 
 - Restrict who can push (add only the people who should be allowed to push)
+- Require linear history (keeps git log clean)
+
+This single rule covers every branch matching `kql/anything` — you never need to add a rule per branch.
 
 ### 3. GitHub Secrets
 
@@ -71,7 +75,7 @@ To get `AZURE_FUNCTIONAPP_PUBLISH_PROFILE`: Azure Portal → your Function App �
 adx-exporter/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml          # Runs on push to adx-exporter: lint, scan, test, auto-PR
+│       ├── ci.yml          # Runs on push to kql/**: lint, scan, test, auto-PR
 │       └── deploy.yml      # Runs on merge to main: deploy to Azure Functions
 ├── queries/
 │   ├── __init__.py         # QUERIES list — all query definitions live here
@@ -122,17 +126,23 @@ If a hook **blocks** your commit, read the error, fix it manually, then commit a
 
 ## How to add a new query
 
-**Step 1** — Switch to the `adx-exporter` branch:
+**Step 1** — Make sure you are on latest main:
 ```bash
-git checkout adx-exporter
+git checkout main
+git pull origin main
 ```
 
-**Step 2** — Create a `.kql` file in `queries/`:
+**Step 2** — Create a new branch for your query:
+```bash
+git checkout -b kql/your_query_name
+```
+
+**Step 3** — Create a `.kql` file in `queries/`:
 ```
 queries/your_query_name.kql
 ```
 
-**Step 3** — Add an entry to `QUERIES` in `queries/__init__.py`:
+**Step 4** — Add an entry to `QUERIES` in `queries/__init__.py`:
 ```python
 {
     "name": "your_query_name",
@@ -146,14 +156,17 @@ queries/your_query_name.kql
 },
 ```
 
-**Step 4** — Push:
+**Step 5** — Commit both files together and push:
 ```bash
 git add queries/your_query_name.kql queries/__init__.py
 git commit -m "add query: your_query_name"
-git push origin adx-exporter
+git push origin kql/your_query_name
 ```
 
 CI kicks off automatically. Once all checks pass, a PR is auto-created. Get it approved and merged → deploy fires.
+
+> Always branch off `main`, not off another `kql/` branch, so your PR diff is clean.
+> Always commit both files together — CI will fail if `__init__.py` is not updated alongside the `.kql` file.
 
 ---
 

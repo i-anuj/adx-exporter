@@ -6,7 +6,7 @@ on:
       - main
     paths-ignore:
       - 'README.md'
-      - '**.md
+      - '**.md'
 
 jobs:
   deploy-uat:

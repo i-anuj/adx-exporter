@@ -54,9 +54,9 @@ def test_every_query_has_required_fields():
     required = {"name", "metric_name", "metric_value_col", "tags_fn", "kql"}
     for q in QUERIES:
         missing = required - q.keys()
-        assert (
-            not missing
-        ), f"Query '{q.get('name', 'unknown')}' is missing fields: {missing}"
+        assert not missing, (
+            f"Query '{q.get('name', 'unknown')}' is missing fields: {missing}"
+        )
 
 
 def test_every_query_kql_not_empty():

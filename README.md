@@ -144,3 +144,10 @@ Set environment variables in `local.settings.json` (never commit this file):
 | `adx.prd.function_duration_seconds` | gauge | Total function execution time |
 
 All metrics are tagged with `env:test-verifi-python` and `source:adx-exporter`.
+
+[![CI — Lint, Scan and Test](https://github.com/i-anuj/adx-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/i-anuj/adx-exporter/actions/workflows/ci.yml)
+[![Deploy to Azure Functions](https://github.com/i-anuj/adx-exporter/actions/workflows/deploy.yml/badge.svg)](https://github.com/i-anuj/adx-exporter/actions/workflows/deploy.yml)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![Last Commit](https://img.shields.io/github/last-commit/i-anuj/adx-exporter)
+
+
